@@ -76,18 +76,34 @@ List registered devices any time:
 curl http://localhost:5000/api/admin/devices -H "X-Admin-Token: $ADMIN_TOKEN"
 ```
 
-## 5. Expose it via ngrok
+## 5. Expose it via Cloudflare Tunnel (free, no bandwidth cap, no ports opened)
 
+You need a domain added to your Cloudflare account (Cloudflare's DNS must be authoritative for it — a cheap domain from any registrar works, just point its nameservers at Cloudflare).
+
+1. Go to the [Cloudflare Zero Trust dashboard](https://one.dash.cloudflare.com/) → **Networks → Tunnels → Create a tunnel** → choose **Cloudflared** → name it (e.g. `photobackup`).
+2. Copy the **tunnel token** it shows you (you won't see it again without regenerating).
+3. On the same setup screen, add a **Public Hostname**:
+   - Subdomain: `photobackup` (or anything)
+   - Domain: your domain
+   - Service: `HTTP` → `photobackup:5000` (the service name from `docker-compose.yml`, since `cloudflared` reaches it over the internal Docker network — not `localhost`)
+4. Add `TUNNEL_TOKEN=<the token from step 2>` to your `.env` file.
+5. Start everything:
+   ```bash
+   docker compose up -d --build
+   ```
+
+Your server is now reachable at `https://photobackup.yourdomain.com` — this URL is permanent and never changes across restarts, unlike a free ngrok URL. This becomes the `server_url` the Android app uses.
+
+Check the tunnel came up:
 ```bash
-ngrok http 5000
+docker compose logs -f cloudflared
+# look for a line like: "Registered tunnel connection"
 ```
-Copy the `https://xxxx.ngrok-free.app` URL it gives you — that's the `server_url` the Android app will use.
-(A paid ngrok plan with a reserved domain means this URL never changes between restarts — worth it if you'll restart the tunnel often.)
 
 ## 6. Test the upload flow manually before touching the Android app
 
 ```bash
-SERVER=https://xxxx.ngrok-free.app
+SERVER=https://photobackup.yourdomain.com
 TOKEN=kR8f...long-random-string   # from step 4
 
 # Check if a hash exists (should be false the first time)
@@ -127,4 +143,4 @@ docker compose logs -f photobackup
 - Files are streamed to disk while hashing, so a partial/corrupt upload never gets recorded in the database.
 - Re-uploading the same file (same sha256) is safely rejected as a duplicate instead of creating a second copy.
 - Max upload size is 2GB by default (`MAX_CONTENT_LENGTH_MB` in docker-compose.yml) — raise it if you shoot long 4K video.
-- Not yet included (fine for v1, worth adding later): resumable/chunked upload for very large videos on flaky connections, and HTTPS is currently provided only via the ngrok tunnel (fine, since ngrok terminates TLS for you).
+- Not yet included (fine for v1, worth adding later): resumable/chunked upload for very large videos on flaky connections. HTTPS is provided by the Cloudflare Tunnel (Cloudflare terminates TLS for you, so the Flask app itself only needs to speak plain HTTP internally — that's expected and fine).
