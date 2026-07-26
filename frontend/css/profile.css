@@ -1,0 +1,59 @@
+.profile-container{
+
+    width:450px;
+
+    margin:40px auto;
+
+    background:white;
+
+    padding:25px;
+
+    border-radius:8px;
+
+    box-shadow:0 0 10px rgba(0,0,0,.2);
+
+}
+
+.profile-image{
+
+    width:180px;
+
+    height:180px;
+
+    border-radius:50%;
+
+    object-fit:cover;
+
+    display:block;
+
+    margin:auto;
+
+}
+
+input{
+
+    width:100%;
+
+    margin-top:10px;
+
+    margin-bottom:15px;
+
+    padding:10px;
+
+}
+
+button{
+
+    width:100%;
+
+    padding:10px;
+
+    cursor:pointer;
+
+}
+
+hr{
+
+    margin:25px 0;
+
+}

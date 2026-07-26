@@ -7,10 +7,13 @@ services:
     restart: unless-stopped
     env_file:
       - ./backend/.env
+    ports:
+      - "5000:5000"
     volumes:
-      - ./backend/uploads:/app/uploads
+      - /media/ubuntu/ExternalDrive/media-gallery/uploads:/app/uploads
     depends_on:
-      - mysql
+      mysql:
+        condition: service_healthy
 
   mysql:
     image: mysql:8.4
@@ -22,7 +25,12 @@ services:
       MYSQL_USER: mediauser
       MYSQL_PASSWORD: mediapassword
     volumes:
-      - mysql_data:/var/lib/mysql
+      - /media/ubuntu/ExternalDrive/media-gallery/mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -33,6 +41,3 @@ services:
       TUNNEL_TOKEN: ${CF_TUNNEL_TOKEN}
     depends_on:
       - backend
-
-volumes:
-  mysql_data:

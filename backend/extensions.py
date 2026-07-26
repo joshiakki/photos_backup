@@ -10,7 +10,7 @@ db = SQLAlchemy()
 jwt = JWTManager()
 
 # Database Migration
-migrate = Migrate()
+migrate.init_app(app, db)
 
 # Cross-Origin Resource Sharing
 cors = CORS()

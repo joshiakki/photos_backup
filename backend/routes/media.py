@@ -1,5 +1,6 @@
 import os
 import uuid
+from utils.storage import get_user_directories
 
 from flask import (
     Blueprint,
@@ -48,6 +49,8 @@ def allowed_file(filename):
 
 @media_bp.route("/upload", methods=["POST"])
 @jwt_required()
+@media_bp.route("/upload", methods=["POST"])
+@jwt_required()
 def upload():
 
     uid = int(get_jwt_identity())
@@ -75,10 +78,26 @@ def upload():
 
     unique_name = f"{uuid.uuid4().hex}.{extension}"
 
+    # -------------------------------------------------
+    # Create user folders automatically
+    # -------------------------------------------------
+
+    folders = get_user_directories(uid)
+
     if media_type == "image":
-        folder = current_app.config["IMAGE_FOLDER"]
+        folder = folders["images"]
+        relative_path = os.path.join(
+            str(uid),
+            "images",
+            unique_name
+        )
     else:
-        folder = current_app.config["VIDEO_FOLDER"]
+        folder = folders["videos"]
+        relative_path = os.path.join(
+            str(uid),
+            "videos",
+            unique_name
+        )
 
     save_path = os.path.join(folder, unique_name)
 
@@ -91,7 +110,7 @@ def upload():
         media_type=media_type,
         file_size=os.path.getsize(save_path),
         mime_type=file.content_type,
-        file_path=save_path
+        file_path=relative_path
     )
 
     db.session.add(media)
@@ -101,7 +120,6 @@ def upload():
         "message": "Upload successful",
         "media": media.to_dict()
     }), 201
-
 
 # ---------------------------------------------------------
 # List User Media
