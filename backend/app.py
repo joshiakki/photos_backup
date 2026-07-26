@@ -4,7 +4,7 @@ from flask import Flask, jsonify
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
-from extensions import init_extensions, db
+from extensions import init_extensions, db, jwt, migrate
 
 # Import Blueprints (we will create these next)
 from routes.auth import auth_bp
