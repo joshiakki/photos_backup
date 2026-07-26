@@ -1,182 +1,199 @@
-from datetime import datetime
+from datetime import timedelta
 
-from flask import Blueprint, request, jsonify
+from flask import Blueprint
+from flask import jsonify
+from flask import request
+
+from werkzeug.security import (
+    generate_password_hash,
+    check_password_hash
+)
+
 from flask_jwt_extended import (
     create_access_token,
-    create_refresh_token,
-    jwt_required,
-    get_jwt_identity,
+    create_refresh_token
 )
 
 from extensions import db
-from models import User, ActivityLog
-
-auth_bp = Blueprint("auth", __name__)
-
-
-def log_activity(user_id, activity, ip):
-    log = ActivityLog(
-        user_id=user_id,
-        activity=activity,
-        ip_address=ip
-    )
-
-    db.session.add(log)
-    db.session.commit()
+from models import User
+from config import Config
 
 
-# -------------------------------------------------
+auth_bp = Blueprint(
+    "auth",
+    __name__
+)
+
+
+# ----------------------------------------------------
 # Register
-# -------------------------------------------------
+# ----------------------------------------------------
 
-@auth_bp.route("/register", methods=["POST"])
+@auth_bp.route(
+    "/register",
+    methods=["POST"]
+)
 def register():
 
     data = request.get_json()
 
-    if not data:
-        return jsonify({"error": "Invalid JSON"}), 400
-
     username = data.get("username", "").strip()
-    email = data.get("email", "").strip().lower()
+
+    email = data.get("email", "").lower().strip()
+
     password = data.get("password", "")
 
-    if not username or not email or not password:
+    if not username:
+
         return jsonify({
-            "error": "All fields are required"
+            "message": "Username required"
         }), 400
 
-    if User.query.filter_by(username=username).first():
-        return jsonify({
-            "error": "Username already exists"
-        }), 409
+    if not email:
 
-    if User.query.filter_by(email=email).first():
         return jsonify({
-            "error": "Email already exists"
+            "message": "Email required"
+        }), 400
+
+    if not password:
+
+        return jsonify({
+            "message": "Password required"
+        }), 400
+
+    existing = User.query.filter_by(
+        email=email
+    ).first()
+
+    if existing:
+
+        return jsonify({
+            "message": "Email already exists"
         }), 409
 
     user = User(
+
         username=username,
-        email=email
+
+        email=email,
+
+        password_hash=generate_password_hash(
+            password
+        )
+
     )
 
-    user.set_password(password)
-
     db.session.add(user)
+
     db.session.commit()
 
-    log_activity(
-        user.id,
-        "Account Created",
-        request.remote_addr
+    Config.create_user_directories(
+        user.id
     )
 
     return jsonify({
+
         "message": "Registration successful"
+
     }), 201
 
 
-# -------------------------------------------------
+# ----------------------------------------------------
 # Login
-# -------------------------------------------------
+# ----------------------------------------------------
 
-@auth_bp.route("/login", methods=["POST"])
+@auth_bp.route(
+    "/login",
+    methods=["POST"]
+)
 def login():
 
     data = request.get_json()
 
-    if not data:
-        return jsonify({"error": "Invalid JSON"}), 400
+    email = data.get("email", "").lower()
 
-    email = data.get("email", "").strip().lower()
     password = data.get("password", "")
 
-    user = User.query.filter_by(email=email).first()
+    user = User.query.filter_by(
+        email=email
+    ).first()
 
-    if not user:
+    if user is None:
+
         return jsonify({
-            "error": "Invalid credentials"
+
+            "message": "Invalid credentials"
+
         }), 401
 
-    if not user.check_password(password):
+    if not check_password_hash(
+
+        user.password_hash,
+
+        password
+
+    ):
+
         return jsonify({
-            "error": "Invalid credentials"
+
+            "message": "Invalid credentials"
+
         }), 401
 
-    user.last_login = datetime.utcnow()
+    access_token = create_access_token(
 
-    db.session.commit()
+        identity=str(user.id),
 
-    access = create_access_token(identity=str(user.id))
-    refresh = create_refresh_token(identity=str(user.id))
+        expires_delta=timedelta(hours=1)
 
-    log_activity(
-        user.id,
-        "User Logged In",
-        request.remote_addr
+    )
+
+    refresh_token = create_refresh_token(
+
+        identity=str(user.id)
+
     )
 
     return jsonify({
-        "access_token": access,
-        "refresh_token": refresh,
+
+        "access_token": access_token,
+
+        "refresh_token": refresh_token,
+
         "user": user.to_dict()
+
     })
 
 
-# -------------------------------------------------
-# Current User
-# -------------------------------------------------
+# ----------------------------------------------------
+# Verify Token
+# ----------------------------------------------------
 
-@auth_bp.route("/me", methods=["GET"])
+from flask_jwt_extended import jwt_required
+from flask_jwt_extended import get_jwt_identity
+
+
+@auth_bp.route(
+    "/me",
+    methods=["GET"]
+)
 @jwt_required()
 def me():
 
-    uid = int(get_jwt_identity())
+    uid = get_jwt_identity()
 
     user = User.query.get(uid)
 
     if not user:
+
         return jsonify({
-            "error": "User not found"
+
+            "message": "User not found"
+
         }), 404
 
-    return jsonify(user.to_dict())
+    return jsonify(
 
+        user.to_dict()
 
-# -------------------------------------------------
-# Refresh Token
-# -------------------------------------------------
-
-@auth_bp.route("/refresh", methods=["POST"])
-@jwt_required(refresh=True)
-def refresh():
-
-    uid = get_jwt_identity()
-
-    access = create_access_token(identity=uid)
-
-    return jsonify({
-        "access_token": access
-    })
-
-
-# -------------------------------------------------
-# Logout
-# -------------------------------------------------
-
-@auth_bp.route("/logout", methods=["POST"])
-@jwt_required()
-def logout():
-
-    uid = int(get_jwt_identity())
-
-    log_activity(
-        uid,
-        "User Logged Out",
-        request.remote_addr
     )
-
-    return jsonify({
-        "message": "Logout successful"
-    })

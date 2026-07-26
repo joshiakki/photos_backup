@@ -1,5 +1,4 @@
 import os
-from datetime import timedelta
 from dotenv import load_dotenv
 
 # Load environment variables
@@ -7,26 +6,25 @@ load_dotenv()
 
 
 class Config:
-    """
-    Main Application Configuration
-    """
 
     # ---------------------------------------------------------
     # Flask
     # ---------------------------------------------------------
+
     SECRET_KEY = os.getenv(
         "SECRET_KEY",
-        "change-this-in-production"
+        "change-this-secret-key"
     )
 
     # ---------------------------------------------------------
     # Database
     # ---------------------------------------------------------
-    DB_USER = os.getenv("DB_USER", "mediauser")
-    DB_PASSWORD = os.getenv("DB_PASSWORD", "mediapassword")
+
     DB_HOST = os.getenv("DB_HOST", "mysql")
     DB_PORT = os.getenv("DB_PORT", "3306")
     DB_NAME = os.getenv("DB_NAME", "media_gallery")
+    DB_USER = os.getenv("DB_USER", "mediauser")
+    DB_PASSWORD = os.getenv("DB_PASSWORD", "mediapassword")
 
     SQLALCHEMY_DATABASE_URI = (
         f"mysql+pymysql://{DB_USER}:{DB_PASSWORD}"
@@ -38,82 +36,170 @@ class Config:
     # ---------------------------------------------------------
     # JWT
     # ---------------------------------------------------------
+
     JWT_SECRET_KEY = os.getenv(
         "JWT_SECRET_KEY",
         "change-this-jwt-secret"
     )
 
-    JWT_ACCESS_TOKEN_EXPIRES = timedelta(hours=2)
+    JWT_ACCESS_TOKEN_EXPIRES = 3600          # 1 hour
 
-    JWT_REFRESH_TOKEN_EXPIRES = timedelta(days=30)
+    JWT_REFRESH_TOKEN_EXPIRES = 2592000      # 30 days
 
     # ---------------------------------------------------------
-    # Upload Settings
+    # Upload Storage
     # ---------------------------------------------------------
-    BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 
-    UPLOAD_FOLDER = os.path.join(BASE_DIR, "uploads")
+    # Root upload directory
+    # Docker volume will mount here
 
-    IMAGE_FOLDER = os.path.join(UPLOAD_FOLDER, "images")
+    UPLOAD_FOLDER = os.getenv(
+        "UPLOAD_FOLDER",
+        "/app/uploads"
+    )
 
-    VIDEO_FOLDER = os.path.join(UPLOAD_FOLDER, "videos")
+    PROFILE_FOLDER = "profiles"
 
-    PROFILE_FOLDER = os.path.join(UPLOAD_FOLDER, "profiles")
+    IMAGE_FOLDER = "images"
 
-    # Maximum Upload Size (500 MB)
-    MAX_CONTENT_LENGTH = 500 * 1024 * 1024
+    VIDEO_FOLDER = "videos"
+
+    THUMBNAIL_FOLDER = "thumbnails"
+
+    # ---------------------------------------------------------
+    # Upload Limits
+    # ---------------------------------------------------------
+
+    MAX_CONTENT_LENGTH = (
+        5 * 1024 * 1024 * 1024
+    )  # 5 GB
 
     # ---------------------------------------------------------
     # Allowed Extensions
     # ---------------------------------------------------------
+
     ALLOWED_IMAGE_EXTENSIONS = {
+
         "jpg",
         "jpeg",
         "png",
         "gif",
         "bmp",
-        "webp"
+        "webp",
+        "heic"
+
     }
 
     ALLOWED_VIDEO_EXTENSIONS = {
+
         "mp4",
         "mov",
         "avi",
         "mkv",
-        "webm"
+        "webm",
+        "m4v"
+
     }
 
     # ---------------------------------------------------------
-    # Pagination
+    # User Folder Structure
     # ---------------------------------------------------------
-    MEDIA_PER_PAGE = 20
+
+    @staticmethod
+    def get_user_directory(user_id):
+
+        return os.path.join(
+
+            Config.UPLOAD_FOLDER,
+
+            str(user_id)
+
+        )
+
+    @staticmethod
+    def get_profile_directory(user_id):
+
+        return os.path.join(
+
+            Config.get_user_directory(user_id),
+
+            Config.PROFILE_FOLDER
+
+        )
+
+    @staticmethod
+    def get_image_directory(user_id):
+
+        return os.path.join(
+
+            Config.get_user_directory(user_id),
+
+            Config.IMAGE_FOLDER
+
+        )
+
+    @staticmethod
+    def get_video_directory(user_id):
+
+        return os.path.join(
+
+            Config.get_user_directory(user_id),
+
+            Config.VIDEO_FOLDER
+
+        )
+
+    @staticmethod
+    def get_thumbnail_directory(user_id):
+
+        return os.path.join(
+
+            Config.get_user_directory(user_id),
+
+            Config.THUMBNAIL_FOLDER
+
+        )
 
     # ---------------------------------------------------------
-    # Logging
+    # Create Root Upload Directory
     # ---------------------------------------------------------
-    LOG_LEVEL = "INFO"
 
-    # ---------------------------------------------------------
-    # CORS
-    # ---------------------------------------------------------
-    CORS_HEADERS = "Content-Type"
-
-    # ---------------------------------------------------------
-    # Cloudflare
-    # ---------------------------------------------------------
-    PREFERRED_URL_SCHEME = "https"
-
-    # ---------------------------------------------------------
-    # Ensure folders exist
-    # ---------------------------------------------------------
     @staticmethod
     def create_directories():
-        folders = [
+
+        os.makedirs(
+
             Config.UPLOAD_FOLDER,
-            Config.IMAGE_FOLDER,
-            Config.VIDEO_FOLDER,
-            Config.PROFILE_FOLDER,
+
+            exist_ok=True
+
+        )
+
+    # ---------------------------------------------------------
+    # Create User Folder Structure
+    # ---------------------------------------------------------
+
+    @staticmethod
+    def create_user_directories(user_id):
+
+        folders = [
+
+            Config.get_profile_directory(user_id),
+
+            Config.get_image_directory(user_id),
+
+            Config.get_video_directory(user_id),
+
+            Config.get_thumbnail_directory(user_id)
+
         ]
 
         for folder in folders:
-            os.makedirs(folder, exist_ok=True)
+
+            os.makedirs(
+
+                folder,
+
+                exist_ok=True
+
+            )

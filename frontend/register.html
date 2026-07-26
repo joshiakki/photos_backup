@@ -1,75 +1,194 @@
 <!DOCTYPE html>
+
 <html lang="en">
 
 <head>
 
-    <meta charset="UTF-8">
+<meta charset="UTF-8">
 
-    <meta name="viewport"
-          content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 
-    <title>Register</title>
+<title>
+Create Account
+</title>
 
-    <link rel="stylesheet"
-          href="css/style.css">
 
-    <link rel="stylesheet"
-          href="css/login.css">
+<link rel="stylesheet" href="style.css">
 
+<link rel="manifest" href="manifest.json">
+
+<meta name="theme-color" content="#0066ff">
 </head>
 
+<script src="app.js"></script>
 <body>
 
-<div class="login-container">
 
-    <h2>Create Account</h2>
+<div class="container">
 
-    <form id="registerForm">
 
-        <input
-            type="text"
-            id="username"
-            placeholder="Username"
-            required>
+<h1>
+Photo Backup
+</h1>
 
-        <input
-            type="email"
-            id="email"
-            placeholder="Email"
-            required>
 
-        <input
-            type="password"
-            id="password"
-            placeholder="Password"
-            required>
+<h2>
+Create Account
+</h2>
 
-        <button type="submit">
 
-            Register
 
-        </button>
+<input
 
-    </form>
+type="text"
 
-    <p>
+id="username"
 
-        Already have an account?
+placeholder="Username"
 
-        <a href="login.html">
+>
 
-            Login
 
-        </a>
 
-    </p>
+<input
+
+type="email"
+
+id="email"
+
+placeholder="Email"
+
+>
+
+
+
+<input
+
+type="password"
+
+id="password"
+
+placeholder="Password"
+
+>
+
+
+
+<button onclick="register()">
+
+Register
+
+</button>
+
+
+
+<p id="message"></p>
+
+
+
+<a href="login.html">
+
+Already have an account? Login
+
+</a>
+
+
 
 </div>
 
-<script src="js/config.js"></script>
 
-<script src="js/register.js"></script>
+
+
+<script>
+
+
+async function register(){
+
+
+let username =
+document.getElementById("username").value;
+
+
+let email =
+document.getElementById("email").value;
+
+
+let password =
+document.getElementById("password").value;
+
+
+
+let response = await fetch(
+
+"/api/auth/register",
+
+{
+
+
+method:"POST",
+
+
+headers:{
+
+
+"Content-Type":"application/json"
+
+
+},
+
+
+body:JSON.stringify({
+
+username:username,
+
+email:email,
+
+password:password
+
+})
+
+
+}
+
+);
+
+
+
+let data = await response.json();
+
+
+
+document.getElementById(
+
+"message"
+
+).innerHTML = data.message;
+
+
+
+if(response.ok){
+
+
+setTimeout(()=>{
+
+
+window.location.href="login.html";
+
+
+},1500);
+
+
+}
+
+
+}
+
+
+
+</script>
+
 
 </body>
+
 
 </html>

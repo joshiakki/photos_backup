@@ -1,53 +1,217 @@
 version: "3.9"
 
+
 services:
+
+
+  # -----------------------------------
+  # Flask Backend API
+  # -----------------------------------
+
   backend:
-    build: ./backend
-    container_name: media_backend
-    restart: unless-stopped
-    env_file:
-      - ./backend/.env
-    ports:
-      - "5000:5000"
-    volumes:
-      - /media/ubuntu/ExternalDrive/media-gallery/uploads:/app/uploads
-    depends_on:
-      mysql:
-        condition: service_healthy
-  nginx:
+
     build:
+
       context: .
-      dockerfile: nginx/Dockerfile
-    container_name: media_nginx
+
+      dockerfile: backend/Dockerfile
+
+
+    container_name: media_backend
+
+
     restart: unless-stopped
-    ports:
-      - "80:80"
-    depends_on:
-      - backend
-      
-  mysql:
-    image: mysql:8.4
-    container_name: media_mysql
-    restart: unless-stopped
-    environment:
-      MYSQL_ROOT_PASSWORD: rootpassword
-      MYSQL_DATABASE: media_gallery
-      MYSQL_USER: mediauser
-      MYSQL_PASSWORD: mediapassword
+
+
+    env_file:
+
+      - backend/.env
+
+
     volumes:
-      - /media/ubuntu/ExternalDrive/media-gallery/mysql:/var/lib/mysql
+
+      # External HDD storage
+      - ${MEDIA_STORAGE_PATH}:/app/uploads
+
+
+    depends_on:
+
+      mysql:
+
+        condition: service_healthy
+
+
+    networks:
+
+      - media_network
+
+
+
+
+  # -----------------------------------
+  # MySQL Database
+  # -----------------------------------
+
+  mysql:
+
+    image: mysql:8.4
+
+
+    container_name: media_mysql
+
+
+    restart: unless-stopped
+
+
+    environment:
+
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+
+      MYSQL_USER: ${MYSQL_USER}
+
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+
+
+
+    volumes:
+
+      - mysql_data:/var/lib/mysql
+
+
+
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+
+      test:
+
+        [
+          "CMD",
+          "mysqladmin",
+          "ping",
+          "-h",
+          "localhost"
+        ]
+
+
       interval: 10s
+
       timeout: 5s
+
       retries: 10
 
-  cloudflared:
-    image: cloudflare/cloudflared:latest
-    container_name: media_tunnel
+
+
+    networks:
+
+      - media_network
+
+
+
+
+
+  # -----------------------------------
+  # Nginx
+  # -----------------------------------
+
+  nginx:
+
+
+    build:
+
+      context: .
+
+      dockerfile: nginx/Dockerfile
+
+
+
+    container_name: media_nginx
+
+
+
     restart: unless-stopped
-    command: tunnel --no-autoupdate run
-    environment:
-      TUNNEL_TOKEN: ${CF_TUNNEL_TOKEN}
+
+
+
+    ports:
+
+      - "8080:80"
+
+
+
     depends_on:
+
       - backend
+
+
+
+    networks:
+
+      - media_network
+
+
+
+
+
+  # -----------------------------------
+  # Cloudflare Tunnel
+  # -----------------------------------
+
+  cloudflared:
+
+
+    image: cloudflare/cloudflared:latest
+
+
+
+    container_name: media_tunnel
+
+
+
+    restart: unless-stopped
+
+
+
+    command:
+
+      tunnel --no-autoupdate run
+
+
+
+    environment:
+
+
+      TUNNEL_TOKEN:
+
+        ${CF_TUNNEL_TOKEN}
+
+
+
+    depends_on:
+
+
+      - nginx
+
+
+
+    networks:
+
+      - media_network
+
+
+
+
+volumes:
+
+
+  mysql_data:
+
+
+
+networks:
+
+
+  media_network:
+
+
+    driver: bridge

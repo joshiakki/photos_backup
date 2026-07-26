@@ -1,236 +1,321 @@
-import os
 import uuid
-from utils.storage import get_user_directories
 
-from flask import (
-    Blueprint,
-    jsonify,
-    request,
-    send_file,
-    current_app
-)
+from flask import Blueprint
+from flask import jsonify
+from flask import request
+from flask import send_file
 
 from flask_jwt_extended import (
     jwt_required,
     get_jwt_identity
 )
 
-from werkzeug.utils import secure_filename
-
 from extensions import db
-from models import Media
 
-media_bp = Blueprint("media", __name__)
+from models import (
+    User,
+    Media
+)
 
+from utils.storage import (
+    save_uploaded_file,
+    delete_file
+)
 
-# ---------------------------------------------------------
-# Helper
-# ---------------------------------------------------------
-
-def allowed_file(filename):
-
-    if "." not in filename:
-        return False
-
-    extension = filename.rsplit(".", 1)[1].lower()
-
-    if extension in current_app.config["ALLOWED_IMAGE_EXTENSIONS"]:
-        return "image"
-
-    if extension in current_app.config["ALLOWED_VIDEO_EXTENSIONS"]:
-        return "video"
-
-    return False
+media_bp = Blueprint(
+    "media",
+    __name__
+)
 
 
 # ---------------------------------------------------------
-# Upload
+# Upload Media
 # ---------------------------------------------------------
 
-@media_bp.route("/upload", methods=["POST"])
-@jwt_required()
-@media_bp.route("/upload", methods=["POST"])
+@media_bp.route(
+    "/upload",
+    methods=["POST"]
+)
 @jwt_required()
 def upload():
 
-    uid = int(get_jwt_identity())
+    user_id = uuid.UUID(
+        get_jwt_identity()
+    )
+
+    user = db.session.get(
+        User,
+        user_id
+    )
+
+    if user is None:
+
+        return jsonify({
+
+            "message": "User not found"
+
+        }), 404
 
     if "file" not in request.files:
+
         return jsonify({
-            "error": "No file uploaded"
+
+            "message": "No file uploaded"
+
         }), 400
 
     file = request.files["file"]
 
     if file.filename == "":
+
         return jsonify({
-            "error": "No file selected"
+
+            "message": "No file selected"
+
         }), 400
 
-    media_type = allowed_file(file.filename)
+    try:
 
-    if not media_type:
+        uploaded = save_uploaded_file(
+
+            file,
+
+            str(user.id)
+
+        )
+
+    except ValueError as e:
+
         return jsonify({
-            "error": "Unsupported file type"
+
+            "message": str(e)
+
         }), 400
-
-    extension = file.filename.rsplit(".", 1)[1].lower()
-
-    unique_name = f"{uuid.uuid4().hex}.{extension}"
-
-    # -------------------------------------------------
-    # Create user folders automatically
-    # -------------------------------------------------
-
-    folders = get_user_directories(uid)
-
-    if media_type == "image":
-        folder = folders["images"]
-        relative_path = os.path.join(
-            str(uid),
-            "images",
-            unique_name
-        )
-    else:
-        folder = folders["videos"]
-        relative_path = os.path.join(
-            str(uid),
-            "videos",
-            unique_name
-        )
-
-    save_path = os.path.join(folder, unique_name)
-
-    file.save(save_path)
 
     media = Media(
-        user_id=uid,
-        original_filename=secure_filename(file.filename),
-        stored_filename=unique_name,
-        media_type=media_type,
-        file_size=os.path.getsize(save_path),
-        mime_type=file.content_type,
-        file_path=relative_path
+
+        user_id=user.id,
+
+        original_filename=uploaded["original_filename"],
+
+        stored_filename=uploaded["stored_filename"],
+
+        media_type=uploaded["media_type"],
+
+        mime_type=uploaded["mime_type"],
+
+        file_size=uploaded["file_size"],
+
+        file_path=uploaded["file_path"]
+
     )
 
     db.session.add(media)
+
+    user.storage_used += uploaded["file_size"]
+
     db.session.commit()
 
     return jsonify({
-        "message": "Upload successful",
+
+        "message": "Upload Successful",
+
         "media": media.to_dict()
+
     }), 201
 
+
 # ---------------------------------------------------------
-# List User Media
+# List Media
 # ---------------------------------------------------------
 
-@media_bp.route("/", methods=["GET"])
+@media_bp.route(
+    "/list",
+    methods=["GET"]
+)
 @jwt_required()
 def list_media():
 
-    uid = int(get_jwt_identity())
+    user_id = uuid.UUID(
+        get_jwt_identity()
+    )
 
     media = Media.query.filter_by(
-        user_id=uid,
+
+        user_id=user_id,
+
         is_deleted=False
+
     ).order_by(
+
         Media.uploaded_at.desc()
+
     ).all()
 
     return jsonify([
-        m.to_dict()
-        for m in media
+
+        item.to_dict()
+
+        for item in media
+
     ])
 
 
 # ---------------------------------------------------------
-# Download / View
+# Download Media
 # ---------------------------------------------------------
 
-@media_bp.route("/<int:media_id>", methods=["GET"])
+@media_bp.route(
+    "/download/<string:media_id>",
+    methods=["GET"]
+)
 @jwt_required()
-def get_media(media_id):
+def download(media_id):
 
-    uid = int(get_jwt_identity())
+    uid = uuid.UUID(
+        get_jwt_identity()
+    )
 
-    media = Media.query.filter_by(
-        id=media_id,
-        user_id=uid,
-        is_deleted=False
-    ).first()
+    media = db.session.get(
 
-    if not media:
+        Media,
+
+        uuid.UUID(media_id)
+
+    )
+
+    if media is None:
+
         return jsonify({
-            "error": "Media not found"
+
+            "message": "Media not found"
+
         }), 404
 
+    if media.user_id != uid:
+
+        return jsonify({
+
+            "message": "Access denied"
+
+        }), 403
+
     return send_file(
+
         media.file_path,
-        mimetype=media.mime_type
+
+        as_attachment=True,
+
+        download_name=media.original_filename
+
     )
 
 
 # ---------------------------------------------------------
-# Delete
+# Delete Media
 # ---------------------------------------------------------
 
-@media_bp.route("/<int:media_id>", methods=["DELETE"])
+@media_bp.route(
+    "/delete/<string:media_id>",
+    methods=["DELETE"]
+)
 @jwt_required()
-def delete_media(media_id):
+def delete(media_id):
 
-    uid = int(get_jwt_identity())
+    uid = uuid.UUID(
+        get_jwt_identity()
+    )
 
-    media = Media.query.filter_by(
-        id=media_id,
-        user_id=uid,
-        is_deleted=False
-    ).first()
+    media = db.session.get(
 
-    if not media:
+        Media,
+
+        uuid.UUID(media_id)
+
+    )
+
+    if media is None:
+
         return jsonify({
-            "error": "Media not found"
+
+            "message": "Media not found"
+
         }), 404
 
-    if os.path.exists(media.file_path):
-        os.remove(media.file_path)
+    if media.user_id != uid:
 
-    media.is_deleted = True
+        return jsonify({
+
+            "message": "Unauthorized"
+
+        }), 403
+
+    delete_file(
+
+        media.file_path
+
+    )
+
+    user = db.session.get(
+
+        User,
+
+        uid
+
+    )
+
+    if user:
+
+        user.storage_used -= media.file_size
+
+        if user.storage_used < 0:
+
+            user.storage_used = 0
+
+    db.session.delete(
+
+        media
+
+    )
 
     db.session.commit()
 
     return jsonify({
-        "message": "Deleted successfully"
+
+        "message": "Media deleted successfully"
+
     })
 
 
 # ---------------------------------------------------------
-# Stream Video
+# Storage Information
 # ---------------------------------------------------------
 
-@media_bp.route("/stream/<int:media_id>", methods=["GET"])
+@media_bp.route(
+    "/storage",
+    methods=["GET"]
+)
 @jwt_required()
-def stream(media_id):
+def storage_info():
 
-    uid = int(get_jwt_identity())
-
-    media = Media.query.filter_by(
-        id=media_id,
-        user_id=uid,
-        is_deleted=False
-    ).first()
-
-    if not media:
-        return jsonify({
-            "error": "Video not found"
-        }), 404
-
-    if media.media_type != "video":
-        return jsonify({
-            "error": "Requested media is not a video"
-        }), 400
-
-    return send_file(
-        media.file_path,
-        mimetype=media.mime_type
+    uid = uuid.UUID(
+        get_jwt_identity()
     )
+
+    user = db.session.get(
+
+        User,
+
+        uid
+
+    )
+
+    return jsonify({
+
+        "used": user.storage_used,
+
+        "limit": user.storage_limit,
+
+        "remaining": user.storage_limit - user.storage_used
+
+    })

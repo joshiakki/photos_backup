@@ -1,23 +1,66 @@
+import uuid
 from datetime import datetime
-from werkzeug.security import generate_password_hash, check_password_hash
+
+from sqlalchemy.dialects.mysql import CHAR
+from sqlalchemy.types import TypeDecorator
 
 from extensions import db
 
 
+# ---------------------------------------------------------
+# UUID Type
+# ---------------------------------------------------------
+
+class GUID(TypeDecorator):
+    """
+    Store UUID as CHAR(36) in MySQL.
+    """
+
+    impl = CHAR
+    cache_ok = True
+
+    def load_dialect_impl(self, dialect):
+        return dialect.type_descriptor(CHAR(36))
+
+    def process_bind_param(self, value, dialect):
+
+        if value is None:
+            return None
+
+        if isinstance(value, uuid.UUID):
+            return str(value)
+
+        return str(uuid.UUID(value))
+
+    def process_result_value(self, value, dialect):
+
+        if value is None:
+            return None
+
+        return uuid.UUID(value)
+
+
+# ---------------------------------------------------------
+# User
+# ---------------------------------------------------------
+
 class User(db.Model):
+
     __tablename__ = "users"
 
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(
+        GUID(),
+        primary_key=True,
+        default=uuid.uuid4
+    )
 
     username = db.Column(
-        db.String(50),
-        unique=True,
-        nullable=False,
-        index=True
+        db.String(100),
+        nullable=False
     )
 
     email = db.Column(
-        db.String(120),
+        db.String(255),
         unique=True,
         nullable=False,
         index=True
@@ -29,18 +72,17 @@ class User(db.Model):
     )
 
     profile_picture = db.Column(
-        db.String(255),
-        nullable=True
+        db.String(500)
     )
 
-    created_at = db.Column(
-        db.DateTime,
-        default=datetime.utcnow
+    storage_used = db.Column(
+        db.BigInteger,
+        default=0
     )
 
-    last_login = db.Column(
-        db.DateTime,
-        nullable=True
+    storage_limit = db.Column(
+        db.BigInteger,
+        default=100 * 1024 * 1024 * 1024  # 100 GB
     )
 
     is_active = db.Column(
@@ -48,56 +90,69 @@ class User(db.Model):
         default=True
     )
 
+    created_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow
+    )
+
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow
+    )
+
     media = db.relationship(
         "Media",
-        backref="owner",
-        lazy=True,
+        back_populates="user",
         cascade="all, delete-orphan"
     )
 
-    logs = db.relationship(
-        "ActivityLog",
-        backref="user",
-        lazy=True,
+    refresh_tokens = db.relationship(
+        "RefreshToken",
+        back_populates="user",
         cascade="all, delete-orphan"
     )
 
-    def set_password(self, password):
-        self.password_hash = generate_password_hash(password)
-
-    def check_password(self, password):
-        return check_password_hash(
-            self.password_hash,
-            password
-        )
+    login_history = db.relationship(
+        "LoginHistory",
+        back_populates="user",
+        cascade="all, delete-orphan"
+    )
 
     def to_dict(self):
+
         return {
-            "id": self.id,
+
+            "id": str(self.id),
             "username": self.username,
             "email": self.email,
             "profile_picture": self.profile_picture,
-            "created_at": self.created_at.isoformat(),
-            "last_login": (
-                self.last_login.isoformat()
-                if self.last_login
-                else None
-            )
+            "storage_used": self.storage_used,
+            "storage_limit": self.storage_limit,
+            "created_at": self.created_at.isoformat()
+
         }
 
 
+# ---------------------------------------------------------
+# Media
+# ---------------------------------------------------------
+
 class Media(db.Model):
+
     __tablename__ = "media"
 
     id = db.Column(
-        db.Integer,
-        primary_key=True
+        GUID(),
+        primary_key=True,
+        default=uuid.uuid4
     )
 
     user_id = db.Column(
-        db.Integer,
+        GUID(),
         db.ForeignKey("users.id"),
-        nullable=False
+        nullable=False,
+        index=True
     )
 
     original_filename = db.Column(
@@ -107,8 +162,12 @@ class Media(db.Model):
 
     stored_filename = db.Column(
         db.String(255),
-        nullable=False,
-        unique=True
+        nullable=False
+    )
+
+    file_path = db.Column(
+        db.String(500),
+        nullable=False
     )
 
     media_type = db.Column(
@@ -116,24 +175,33 @@ class Media(db.Model):
         nullable=False
     )
 
+    mime_type = db.Column(
+        db.String(100)
+    )
+
     file_size = db.Column(
         db.BigInteger,
         nullable=False
     )
 
-    mime_type = db.Column(
-        db.String(100),
-        nullable=False
+    width = db.Column(
+        db.Integer
     )
 
-    file_path = db.Column(
-        db.String(255),
-        nullable=False
+    height = db.Column(
+        db.Integer
     )
 
-    uploaded_at = db.Column(
-        db.DateTime,
-        default=datetime.utcnow
+    duration = db.Column(
+        db.Float
+    )
+
+    thumbnail_path = db.Column(
+        db.String(500)
+    )
+
+    checksum = db.Column(
+        db.String(64)
     )
 
     is_deleted = db.Column(
@@ -141,39 +209,59 @@ class Media(db.Model):
         default=False
     )
 
+    uploaded_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow
+    )
+
+    user = db.relationship(
+        "User",
+        back_populates="media"
+    )
+
     def to_dict(self):
+
         return {
-            "id": self.id,
+
+            "id": str(self.id),
+            "user_id": str(self.user_id),
             "filename": self.original_filename,
-            "stored_filename": self.stored_filename,
             "media_type": self.media_type,
-            "file_size": self.file_size,
-            "mime_type": self.mime_type,
+            "size": self.file_size,
             "uploaded_at": self.uploaded_at.isoformat()
+
         }
 
 
-class ActivityLog(db.Model):
-    __tablename__ = "activity_logs"
+# ---------------------------------------------------------
+# Refresh Tokens
+# ---------------------------------------------------------
+
+class RefreshToken(db.Model):
+
+    __tablename__ = "refresh_tokens"
 
     id = db.Column(
-        db.Integer,
-        primary_key=True
+        GUID(),
+        primary_key=True,
+        default=uuid.uuid4
     )
 
     user_id = db.Column(
-        db.Integer,
+        GUID(),
         db.ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    token = db.Column(
+        db.Text,
         nullable=False
     )
 
-    activity = db.Column(
-        db.String(255),
+    expires_at = db.Column(
+        db.DateTime,
         nullable=False
-    )
-
-    ip_address = db.Column(
-        db.String(100)
     )
 
     created_at = db.Column(
@@ -181,9 +269,57 @@ class ActivityLog(db.Model):
         default=datetime.utcnow
     )
 
-    def to_dict(self):
-        return {
-            "activity": self.activity,
-            "ip_address": self.ip_address,
-            "created_at": self.created_at.isoformat()
-        }
+    revoked = db.Column(
+        db.Boolean,
+        default=False
+    )
+
+    user = db.relationship(
+        "User",
+        back_populates="refresh_tokens"
+    )
+
+
+# ---------------------------------------------------------
+# Login History
+# ---------------------------------------------------------
+
+class LoginHistory(db.Model):
+
+    __tablename__ = "login_history"
+
+    id = db.Column(
+        GUID(),
+        primary_key=True,
+        default=uuid.uuid4
+    )
+
+    user_id = db.Column(
+        GUID(),
+        db.ForeignKey("users.id"),
+        nullable=False,
+        index=True
+    )
+
+    ip_address = db.Column(
+        db.String(100)
+    )
+
+    user_agent = db.Column(
+        db.Text
+    )
+
+    login_time = db.Column(
+        db.DateTime,
+        default=datetime.utcnow
+    )
+
+    successful = db.Column(
+        db.Boolean,
+        default=True
+    )
+
+    user = db.relationship(
+        "User",
+        back_populates="login_history"
+    )

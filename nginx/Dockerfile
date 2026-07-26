@@ -1,5 +1,13 @@
-FROM nginx:latest
+FROM nginx:1.27-alpine
 
-COPY nginx/nginx.conf /etc/nginx/nginx.conf
+
+RUN rm /etc/nginx/conf.d/default.conf
+
+
+COPY nginx/nginx.conf /etc/nginx/conf.d/default.conf
+
 
 COPY frontend/ /usr/share/nginx/html/
+
+
+EXPOSE 80

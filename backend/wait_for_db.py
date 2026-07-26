@@ -1,39 +1,62 @@
 import time
-
-from sqlalchemy import create_engine
-from sqlalchemy.exc import OperationalError
+import pymysql
 
 from config import Config
 
 
-def wait():
+MAX_RETRIES = 60
+WAIT_SECONDS = 3
 
-    engine = create_engine(Config.SQLALCHEMY_DATABASE_URI)
 
-    retries = 30
+def wait_for_mysql():
 
-    while retries > 0:
+    print("Waiting for MySQL...")
+
+    retries = 0
+
+    while retries < MAX_RETRIES:
 
         try:
 
-            conn = engine.connect()
+            connection = pymysql.connect(
 
-            conn.close()
+                host=Config.DB_HOST,
 
-            print("Database Ready")
+                user=Config.DB_USER,
 
-            return
+                password=Config.DB_PASSWORD,
 
-        except OperationalError:
+                database=Config.DB_NAME,
 
-            retries -= 1
+                port=int(Config.DB_PORT)
 
-            print("Waiting for MySQL...")
+            )
 
-            time.sleep(2)
+            connection.close()
 
-    raise RuntimeError("Database never became ready.")
+            print("MySQL Connected.")
+
+            return True
+
+        except Exception as e:
+
+            retries += 1
+
+            print(
+
+                f"Retry {retries}/{MAX_RETRIES} : {e}"
+
+            )
+
+            time.sleep(WAIT_SECONDS)
+
+    raise Exception(
+
+        "Unable to connect to MySQL."
+
+    )
 
 
 if __name__ == "__main__":
-    wait()
+
+    wait_for_mysql()
