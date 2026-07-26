@@ -1,0 +1,9 @@
+Flask
+Flask-SQLAlchemy
+SQLAlchemy
+PyMySQL
+Flask-JWT-Extended
+Flask-Migrate
+gunicorn
+python-dotenv
+cryptography
