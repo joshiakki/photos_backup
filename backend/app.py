@@ -2,7 +2,7 @@ from flask import Flask, jsonify
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from config import Config
-from extensions import init_extensions
+from extensions import init_extensions, db
 
 # Blueprints
 from routes.auth import auth_bp
@@ -58,6 +58,12 @@ def create_app():
         users_bp,
         url_prefix="/api/users"
     )
+
+    # -----------------------------
+    # Create Database Tables
+    # -----------------------------
+    with app.app_context():
+        db.create_all()
 
     # -----------------------------
     # Health Check
@@ -116,6 +122,8 @@ def create_app():
 
     @app.errorhandler(500)
     def internal_server_error(error):
+        db.session.rollback()
+
         return jsonify({
             "success": False,
             "message": "Internal Server Error"
