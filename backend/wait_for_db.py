@@ -20,15 +20,15 @@ def wait_for_mysql():
 
             connection = pymysql.connect(
 
-                host=Config.DB_HOST,
+                host=Config.MYSQL_HOST,
 
-                user=Config.DB_USER,
+                user=Config.MYSQL_USER,
 
-                password=Config.DB_PASSWORD,
+                password=Config.MYSQL_PASSWORD,
 
-                database=Config.DB_NAME,
+                database=Config.MYSQL_DATABASE,
 
-                port=int(Config.DB_PORT)
+                port=int(Config.MYSQL_PORT)
 
             )
 
