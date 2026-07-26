@@ -1,9 +1,13 @@
 Flask
+Flask-Cors
 Flask-SQLAlchemy
 SQLAlchemy
 PyMySQL
 Flask-JWT-Extended
 Flask-Migrate
-gunicorn
+Flask-Limiter
 python-dotenv
+gunicorn
+Werkzeug
 cryptography
+Pillow
