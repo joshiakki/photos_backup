@@ -58,7 +58,7 @@ class Config:
         + "@"
         + MYSQL_HOST
         + ":"
-        + MYSQL_PORT
+        + MYSQL_PORT            
         + "/"
         + MYSQL_DATABASE
     )
@@ -83,6 +83,28 @@ class Config:
             5368709120
         )
     )
+    ALLOWED_IMAGE_EXTENSIONS = {
+    "jpg",
+    "jpeg",
+    "png",
+    "gif",
+    "bmp",
+    "webp",
+    "heic",
+    "heif"}
+
+    ALLOWED_VIDEO_EXTENSIONS = {
+    "mp4",
+    "mov",
+    "avi",
+    "mkv",
+    "wmv",
+    "flv",
+    "webm",
+    "m4v"
+    }
+
+    MAX_CONTENT_LENGTH = 5 * 1024 * 1024 * 1024  # 5 GB
 
 
     @staticmethod
