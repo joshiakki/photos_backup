@@ -1,29 +1,38 @@
+version: "3.9"
+
 services:
-  photobackup:
-    build: .
-    container_name: photobackup
+  backend:
+    build: ./backend
+    container_name: media_backend
     restart: unless-stopped
-    ports:
-      - "5000:5000"
-    environment:
-      - ADMIN_TOKEN=${ADMIN_TOKEN}
-      - BACKUP_ROOT=/data/backups
-      - DB_PATH=/data/db/backup.db
-      - MAX_CONTENT_LENGTH_MB=2048
+    env_file:
+      - ./backend/.env
     volumes:
-      # CHANGE THE LEFT SIDE to wherever your external HDD is mounted on the Ubuntu host.
-      # Find it with `lsblk` or `df -h` first (see README.md).
-      - /mnt/external_hdd/photobackup:/data
+      - ./backend/uploads:/app/uploads
+    depends_on:
+      - mysql
+
+  mysql:
+    image: mysql:8.4
+    container_name: media_mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: media_gallery
+      MYSQL_USER: mediauser
+      MYSQL_PASSWORD: mediapassword
+    volumes:
+      - mysql_data:/var/lib/mysql
 
   cloudflared:
     image: cloudflare/cloudflared:latest
-    container_name: cloudflared
+    container_name: media_tunnel
     restart: unless-stopped
-    command: tunnel --no-autoupdate run --token ${TUNNEL_TOKEN}
+    command: tunnel --no-autoupdate run
+    environment:
+      TUNNEL_TOKEN: ${CF_TUNNEL_TOKEN}
     depends_on:
-      - photobackup
-    # Uses the default bridge network + service name DNS, so cloudflared
-    # reaches the app at http://photobackup:5000 automatically. That's why
-    # the tunnel's Public Hostname in the Cloudflare dashboard should point
-    # to http://photobackup:5000 rather than localhost:5000 when both
-    # containers are on the same compose network (the default).
+      - backend
+
+volumes:
+  mysql_data:
