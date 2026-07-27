@@ -13,9 +13,8 @@ services:
       - DB_PATH=/data/db/backup.db
       - MAX_CONTENT_LENGTH_MB=2048
     volumes:
-      # CHANGE THE LEFT SIDE to wherever your external HDD is mounted on the Ubuntu host.
-      # Find it with `lsblk` or `df -h` first (see README.md).
-      - /mnt/external_hdd/photobackup:/data
+      # HDD_PATH comes from .env - point it at wherever your external drive is mounted.
+      - ${HDD_PATH}:/data
 
   cloudflared:
     image: cloudflare/cloudflared:latest

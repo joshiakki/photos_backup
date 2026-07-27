@@ -37,10 +37,9 @@ cp .env.example .env
 ```
 
 Edit `.env` and set:
+- `HDD_PATH` — the folder you just created on the external HDD, e.g. `/mnt/external_hdd/photobackup`. This is what actually gets mounted into the container.
 - `ADMIN_USERNAME` / `ADMIN_PASSWORD` — this account is created automatically the first time the server starts, with `role=admin` and pre-approved status. Use a real password here, not the placeholder.
-- `GOOGLE_CLIENT_ID` — only needed if you want "Sign in with Google" to work (see step 6 below). Leave the placeholder if you don't want Google Sign-In; the Google button will simply not appear on the login page.
-
-Also edit `docker-compose.yml` if your HDD mount path isn't `/mnt/external_hdd/photobackup`.
+- `GOOGLE_CLIENT_ID` — only needed if you want "Sign in with Google" to work (see step 5 below). Leave the placeholder if you don't want Google Sign-In; the Google button will simply not appear on the login page.
 
 ## 3. Build and run
 
