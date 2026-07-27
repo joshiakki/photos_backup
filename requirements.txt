@@ -4,12 +4,3 @@ Werkzeug==3.0.3
 google-auth==2.32.0
 requests==2.32.3
 
-docker compose exec photobackup python3 -c "
-from werkzeug.security import generate_password_hash
-import sqlite3, os
-conn = sqlite3.connect('/data/db/backup.db')
-conn.execute('UPDATE users SET password_hash = ? WHERE username = ?',
-             (generate_password_hash(os.environ['ADMIN_PASSWORD']), os.environ['ADMIN_USERNAME']))
-conn.commit()
-print('Admin password reset to match .env')
-"
