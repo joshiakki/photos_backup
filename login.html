@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Photo Backup — Sign in</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 400px;
+    margin: 60px auto;
+    padding: 0 20px;
+    color: #1a1a1a;
+  }
+  h1 { font-size: 20px; text-align: center; }
+  .card { border: 1px solid #ddd; border-radius: 10px; padding: 24px; }
+  label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; margin-top: 10px; }
+  input[type="text"], input[type="password"] {
+    width: 100%; padding: 8px; box-sizing: border-box;
+    border: 1px solid #ccc; border-radius: 6px;
+  }
+  button.primary {
+    width: 100%; background: #1565C0; color: white; border: none;
+    padding: 10px 16px; border-radius: 6px; cursor: pointer; font-size: 14px;
+    margin-top: 16px;
+  }
+  .toggle { text-align: center; margin-top: 14px; font-size: 13px; }
+  .toggle a { color: #1565C0; cursor: pointer; }
+  .divider { display: flex; align-items: center; margin: 18px 0; color: #999; font-size: 12px; }
+  .divider::before, .divider::after { content: ""; flex: 1; border-bottom: 1px solid #ddd; }
+  .divider span { padding: 0 10px; }
+  #googleBtn { display: flex; justify-content: center; margin-bottom: 4px; }
+  #message { font-size: 13px; margin-top: 12px; text-align: center; }
+  #message.error { color: #c0392b; }
+  #message.success { color: #155724; }
+</style>
+</head>
+<body>
+
+<h1>Photo Backup</h1>
+
+<div class="card">
+  <div id="googleBtn"></div>
+  <div class="divider"><span>or</span></div>
+
+  <form id="authForm">
+    <label for="username">Username</label>
+    <input type="text" id="username" required />
+
+    <label for="password">Password</label>
+    <input type="password" id="password" required minlength="8" />
+
+    <button type="submit" class="primary" id="submitBtn">Sign in</button>
+  </form>
+
+  <div class="toggle">
+    <span id="toggleText">Don't have an account?</span>
+    <a id="toggleLink">Register</a>
+  </div>
+
+  <div id="message"></div>
+</div>
+
+<script>
+const TOKEN_KEY = "photobackup_token";
+const form = document.getElementById("authForm");
+const submitBtn = document.getElementById("submitBtn");
+const toggleLink = document.getElementById("toggleLink");
+const toggleText = document.getElementById("toggleText");
+const messageEl = document.getElementById("message");
+
+let mode = "login"; // or "register"
+
+toggleLink.addEventListener("click", () => {
+  mode = mode === "login" ? "register" : "login";
+  submitBtn.textContent = mode === "login" ? "Sign in" : "Register";
+  toggleText.textContent = mode === "login" ? "Don't have an account?" : "Already have an account?";
+  toggleLink.textContent = mode === "login" ? "Register" : "Sign in";
+  messageEl.textContent = "";
+});
+
+function showMessage(text, isError) {
+  messageEl.textContent = text;
+  messageEl.className = isError ? "error" : "success";
+}
+
+form.addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const username = document.getElementById("username").value.trim();
+  const password = document.getElementById("password").value;
+
+  try {
+    if (mode === "register") {
+      const resp = await fetch("/api/auth/register", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "Registration failed");
+      showMessage(data.message, false);
+      toggleLink.click(); // flip back to login
+    } else {
+      const resp = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username, password }),
+      });
+      const data = await resp.json();
+      if (!resp.ok) throw new Error(data.error || "Login failed");
+      localStorage.setItem(TOKEN_KEY, data.token);
+      window.location.href = "/upload";
+    }
+  } catch (err) {
+    showMessage(err.message, true);
+  }
+});
+
+async function handleGoogleCredential(response) {
+  try {
+    const resp = await fetch("/api/auth/google", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id_token: response.credential }),
+    });
+    const data = await resp.json();
+    if (!resp.ok) throw new Error(data.error || "Google sign-in failed");
+    localStorage.setItem(TOKEN_KEY, data.token);
+    window.location.href = "/upload";
+  } catch (err) {
+    showMessage(err.message, true);
+  }
+}
+
+const GOOGLE_CLIENT_ID = "{{ google_client_id }}";
+
+window.onload = () => {
+  if (!GOOGLE_CLIENT_ID) {
+    document.getElementById("googleBtn").style.display = "none";
+    document.querySelector(".divider").style.display = "none";
+    return;
+  }
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleGoogleCredential,
+  });
+  google.accounts.id.renderButton(document.getElementById("googleBtn"), {
+    theme: "outline",
+    size: "large",
+    width: 320,
+  });
+};
+</script>
+
+</body>
+</html>

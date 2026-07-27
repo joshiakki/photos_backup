@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Photo Backup — Browser Upload</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 640px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: #1a1a1a;
+  }
+  h1 { font-size: 20px; }
+  .card {
+    border: 1px solid #ddd;
+    border-radius: 10px;
+    padding: 20px;
+    margin-bottom: 20px;
+  }
+  label { display: block; font-size: 13px; color: #555; margin-bottom: 4px; }
+  input[type="password"], input[type="text"] {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    margin-bottom: 10px;
+  }
+  button {
+    background: #1565C0;
+    color: white;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 14px;
+  }
+  button:disabled { background: #999; cursor: not-allowed; }
+  #dropzone {
+    border: 2px dashed #bbb;
+    border-radius: 10px;
+    padding: 40px 20px;
+    text-align: center;
+    color: #777;
+    cursor: pointer;
+  }
+  #dropzone.dragover { border-color: #1565C0; background: #f0f6ff; }
+  .file-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 0;
+    border-bottom: 1px solid #eee;
+    font-size: 14px;
+  }
+  .status { font-size: 12px; padding: 2px 8px; border-radius: 10px; }
+  .status.pending { background: #eee; color: #555; }
+  .status.hashing, .status.checking, .status.uploading { background: #fff3cd; color: #856404; }
+  .status.done { background: #d4edda; color: #155724; }
+  .status.duplicate { background: #d1ecf1; color: #0c5460; }
+  .status.error { background: #f8d7da; color: #721c24; }
+</style>
+</head>
+<body>
+
+<h1>Photo Backup — Browser Upload</h1>
+
+<div id="accountBar" class="card" style="display:none;">
+  <span id="accountText"></span>
+  <button id="logoutBtn" style="float:right;background:#eee;color:#333;">Log out</button>
+</div>
+
+<div id="pendingNotice" class="card" style="display:none;">
+  Your account is waiting for admin approval. Check back once it's approved.
+</div>
+
+<div class="card">
+  <div id="dropzone">
+    Drag & drop photos or videos here, or click to choose files
+    <input type="file" id="fileInput" accept="image/*,video/*" multiple style="display:none;" />
+  </div>
+</div>
+
+<div class="card" id="fileListCard" style="display:none;">
+  <div id="fileList"></div>
+</div>
+
+<script>
+const TOKEN_KEY = "photobackup_token";
+const dropzone = document.getElementById("dropzone");
+const fileInput = document.getElementById("fileInput");
+const fileListCard = document.getElementById("fileListCard");
+const fileList = document.getElementById("fileList");
+const accountBar = document.getElementById("accountBar");
+const accountText = document.getElementById("accountText");
+const pendingNotice = document.getElementById("pendingNotice");
+const logoutBtn = document.getElementById("logoutBtn");
+
+// Server URL: this page is served by the same server it uploads to, so we
+// just use the current origin - no need to type it in separately.
+const SERVER_URL = window.location.origin;
+
+logoutBtn.addEventListener("click", () => {
+  localStorage.removeItem(TOKEN_KEY);
+  window.location.href = "/login";
+});
+
+dropzone.addEventListener("click", () => fileInput.click());
+dropzone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  dropzone.classList.add("dragover");
+});
+dropzone.addEventListener("dragleave", () => dropzone.classList.remove("dragover"));
+dropzone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropzone.classList.remove("dragover");
+  handleFiles(e.dataTransfer.files);
+});
+fileInput.addEventListener("change", () => handleFiles(fileInput.files));
+
+function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+// Gate the page behind login: verify the saved token is valid and approved
+// before letting anyone drop files in.
+async function checkAuth() {
+  const token = getToken();
+  if (!token) {
+    window.location.href = "/login";
+    return;
+  }
+
+  const resp = await fetch(`${SERVER_URL}/api/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!resp.ok) {
+    localStorage.removeItem(TOKEN_KEY);
+    window.location.href = "/login";
+    return;
+  }
+
+  const { user } = await resp.json();
+  accountBar.style.display = "block";
+  accountText.textContent = `Signed in as ${user.username}`;
+
+  if (user.status !== "approved") {
+    pendingNotice.style.display = "block";
+    dropzone.style.display = "none";
+  }
+}
+checkAuth();
+
+async function sha256Hex(file) {
+  const buffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function setRowStatus(rowEl, statusClass, text) {
+  const badge = rowEl.querySelector(".status");
+  badge.className = "status " + statusClass;
+  badge.textContent = text;
+}
+
+async function processFile(file, token) {
+  const row = document.createElement("div");
+  row.className = "file-row";
+  row.innerHTML = `<span>${file.name}</span><span class="status pending">queued</span>`;
+  fileList.appendChild(row);
+
+  try {
+    setRowStatus(row, "hashing", "hashing...");
+    const sha256 = await sha256Hex(file);
+
+    setRowStatus(row, "checking", "checking...");
+    const checkResp = await fetch(
+      `${SERVER_URL}/api/media/check?sha256=${sha256}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!checkResp.ok) throw new Error(`check failed (HTTP ${checkResp.status})`);
+    const { exists } = await checkResp.json();
+
+    if (exists) {
+      setRowStatus(row, "duplicate", "already backed up");
+      return;
+    }
+
+    setRowStatus(row, "uploading", "uploading...");
+    const mediaType = file.type.startsWith("video") ? "video" : "image";
+    const capturedAt = new Date(file.lastModified).toISOString().split(".")[0];
+
+    const form = new FormData();
+    form.append("media_type", mediaType);
+    form.append("original_name", file.name);
+    form.append("captured_at", capturedAt);
+    form.append("sha256", sha256);
+    form.append("file", file, file.name);
+
+    const uploadResp = await fetch(`${SERVER_URL}/api/media/upload`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+
+    if (uploadResp.status === 201) {
+      setRowStatus(row, "done", "backed up");
+    } else if (uploadResp.status === 409) {
+      setRowStatus(row, "duplicate", "already backed up");
+    } else {
+      const errBody = await uploadResp.json().catch(() => ({}));
+      throw new Error(errBody.error || `HTTP ${uploadResp.status}`);
+    }
+  } catch (err) {
+    setRowStatus(row, "error", err.message || "failed");
+  }
+}
+
+async function handleFiles(fileListArg) {
+  const token = getToken();
+  if (!token) return;
+  fileListCard.style.display = "block";
+
+  const files = Array.from(fileListArg);
+  // Sequential, not parallel - keeps large video uploads from competing for bandwidth
+  for (const file of files) {
+    await processFile(file, token);
+  }
+}
+</script>
+
+</body>
+</html>

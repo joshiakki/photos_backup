@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Photo Backup — Admin</title>
+<style>
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    max-width: 700px;
+    margin: 40px auto;
+    padding: 0 20px;
+    color: #1a1a1a;
+  }
+  h1 { font-size: 20px; }
+  table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #eee; font-size: 14px; }
+  th { color: #666; font-weight: 600; font-size: 12px; text-transform: uppercase; }
+  .badge { padding: 2px 8px; border-radius: 10px; font-size: 12px; }
+  .badge.pending { background: #fff3cd; color: #856404; }
+  .badge.approved { background: #d4edda; color: #155724; }
+  .badge.rejected { background: #f8d7da; color: #721c24; }
+  button {
+    border: none; padding: 5px 10px; border-radius: 6px; cursor: pointer;
+    font-size: 12px; margin-right: 4px;
+  }
+  button.approve { background: #1565C0; color: white; }
+  button.reject { background: #eee; color: #333; }
+  #authGate { text-align: center; margin-top: 60px; }
+  #authGate input {
+    padding: 8px; width: 220px; border: 1px solid #ccc; border-radius: 6px; margin-right: 6px;
+  }
+  #message { font-size: 13px; color: #c0392b; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<div id="authGate">
+  <p>Enter your admin token to continue (log in at <a href="/login">/login</a> first if you don't have one).</p>
+  <input type="password" id="tokenInput" placeholder="Admin API token" />
+  <button class="approve" id="loadBtn">Load</button>
+  <div id="message"></div>
+</div>
+
+<div id="dashboard" style="display:none;">
+  <h1>User accounts</h1>
+  <table>
+    <thead>
+      <tr><th>Username</th><th>Email</th><th>Role</th><th>Status</th><th>Actions</th></tr>
+    </thead>
+    <tbody id="userRows"></tbody>
+  </table>
+</div>
+
+<script>
+const TOKEN_KEY = "photobackup_token";
+const tokenInput = document.getElementById("tokenInput");
+const loadBtn = document.getElementById("loadBtn");
+const authGate = document.getElementById("authGate");
+const dashboard = document.getElementById("dashboard");
+const userRows = document.getElementById("userRows");
+const messageEl = document.getElementById("message");
+
+// Reuse a token already saved from /login, if present
+tokenInput.value = localStorage.getItem(TOKEN_KEY) || "";
+
+loadBtn.addEventListener("click", loadUsers);
+
+async function loadUsers() {
+  const token = tokenInput.value.trim();
+  if (!token) return;
+  messageEl.textContent = "";
+
+  const resp = await fetch("/api/admin/users", {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+
+  if (!resp.ok) {
+    messageEl.textContent = resp.status === 401
+      ? "Unauthorized - check the token, and make sure this account has the admin role"
+      : `Error (HTTP ${resp.status})`;
+    return;
+  }
+
+  localStorage.setItem(TOKEN_KEY, token);
+  const users = await resp.json();
+  renderUsers(users, token);
+  authGate.style.display = "none";
+  dashboard.style.display = "block";
+}
+
+function renderUsers(users, token) {
+  userRows.innerHTML = "";
+  for (const u of users) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `
+      <td>${u.username}</td>
+      <td>${u.email || "—"}</td>
+      <td>${u.role}</td>
+      <td><span class="badge ${u.status}">${u.status}</span></td>
+      <td>
+        ${u.role === "admin" ? "—" : `
+          <button class="approve" data-id="${u.id}" data-action="approve">Approve</button>
+          <button class="reject" data-id="${u.id}" data-action="reject">Reject</button>
+        `}
+      </td>
+    `;
+    userRows.appendChild(tr);
+  }
+
+  userRows.querySelectorAll("button").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      const id = btn.dataset.id;
+      const action = btn.dataset.action;
+      await fetch(`/api/admin/users/${id}/${action}`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      loadUsers();
+    });
+  });
+}
+
+// Auto-load if we already have a saved token
+if (tokenInput.value) loadUsers();
+</script>
+
+</body>
+</html>

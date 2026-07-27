@@ -1,1 +1,0 @@
-const API_BASE_URL = "https://photobackup.allatoneplace.xyz/api";
