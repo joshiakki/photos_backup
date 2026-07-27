@@ -10,4 +10,5 @@ COPY templates ./templates
 
 EXPOSE 5000
 
+# 2 workers is plenty for a personal backup server; large uploads are streamed to disk
 CMD ["gunicorn", "-w", "2", "--timeout", "300", "-b", "0.0.0.0:5000", "app:app"]
